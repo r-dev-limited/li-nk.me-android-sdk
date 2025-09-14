@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Needed if you enable advertising ID collection via consent -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+
+    <application
+        android:label="LinkMe Example"
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:usesCleartextTraffic="true">
+        <meta-data
+            android:name="LinkMeBaseURL"
+            android:value="${LINKME_BASE_URL}" />
+        <activity
+            android:name="nz.co.rdev.example.MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- App Links (https) -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="${LINKME_APP_LINKS_HOST}" />
+            </intent-filter>
+            <!-- Custom URL scheme for deep links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="nz.co.rdev.example" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

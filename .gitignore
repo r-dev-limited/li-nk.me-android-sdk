@@ -1,0 +1,42 @@
+# Gradle
+.gradle/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration
+local.properties
+
+# IDE
+.idea/
+*.iml
+
+# NDK / CMake
+.cxx/
+.externalNativeBuild/
+
+# Misc
+.DS_Store
+captures/
+
+# Java heap dumps and error logs
+java_pid*.hprof
+*.hprof
+hs_err_pid*.log
+replay_pid*.log
+
+# Android artifacts
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+bin/
+gen/
+out/
+.navigation/
+.kotlin/
+.vscode/
+*.log
+*.keystore
+*.jks
+
