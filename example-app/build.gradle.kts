@@ -77,7 +77,7 @@ android {
 }
 
 dependencies {
-    implementation("com.github.r-dev-limited:li-nk.me-android-sdk:0.1.0")
+    implementation("com.github.r-dev-limited:li-nk.me-android-sdk:0.1.2")
 
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)

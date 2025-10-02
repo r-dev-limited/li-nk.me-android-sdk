@@ -18,7 +18,7 @@ Add the dependency:
 
 ```gradle
 dependencies {
-    implementation 'com.github.r-dev-limited:li-nk.me-android-sdk:0.1.0'
+    implementation 'com.github.r-dev-limited:li-nk.me-android-sdk:0.1.2'
 }
 ```
 
