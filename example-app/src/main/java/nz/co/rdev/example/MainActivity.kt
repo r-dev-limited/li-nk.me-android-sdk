@@ -74,6 +74,10 @@ class MainActivity : ComponentActivity() {
             fun updateFromPayload(payload: LinkPayload?) {
                 lastPayload = payload
                 currentScreen = Screen.fromPath(payload?.path)
+                
+                // EXAMPLE: Log to Analytics
+                // This helper demonstrates how to map to Firebase and PostHog
+                AnalyticsHelper.logToAnalytics(context, payload)
             }
 
             fun initializeSdk() {
