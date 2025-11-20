@@ -43,8 +43,8 @@ import android.os.Build
 import android.content.pm.ApplicationInfo
 
 private const val DEFAULT_BASE_URL = "https://0jk2u2h9.li-nk.me"
-private const val APP_ID = "0jk2u2h9"
-private const val APP_KEY = "ak_CgJwMBftYHC_7_WU8i-zIQb4a3OXZ4yqazp87iF2uus"
+private const val APP_ID = "e0qcsxfc"
+private const val APP_KEY = "ak_nMqCl4QwFSVvjC5VrrAvTH0ziWH06WLhua6EtCvFO6o"
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
