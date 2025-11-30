@@ -84,13 +84,13 @@ class MainActivity : ComponentActivity() {
                 val sanitizedBase = baseUrl.trim().ifEmpty { resolvedBaseUrl }
                 baseUrl = sanitizedBase
                 println("[LinkMe Android Example] Initializing LinkMe SDK with base URL: $sanitizedBase")
+                // Note: enablePasteboard is iOS-only and now portal-controlled
                 LinkMe.shared.configure(
                     context = appContext,
                     config = LinkMe.Config(
                         baseUrl = sanitizedBase,
                         appId = APP_ID,
                         appKey = APP_KEY,
-                        enablePasteboard = false,
                         sendDeviceInfo = true,
                         includeVendorId = true,
                         includeAdvertisingId = false,
