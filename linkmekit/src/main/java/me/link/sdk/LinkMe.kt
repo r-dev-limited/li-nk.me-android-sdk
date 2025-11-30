@@ -29,6 +29,11 @@ class LinkMe private constructor() {
         val baseUrl: String,
         val appId: String? = null,
         val appKey: String? = null,
+        /**
+         * @deprecated Pasteboard is iOS-only and now controlled from the Portal.
+         * This parameter is ignored on Android.
+         */
+        @Deprecated("Pasteboard is iOS-only and now controlled from the Portal")
         val enablePasteboard: Boolean = false,
         val sendDeviceInfo: Boolean = true,
         val includeVendorId: Boolean = true,
