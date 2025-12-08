@@ -19,7 +19,8 @@ LinkMe.shared.configure(
   context = applicationContext,
   config = LinkMe.Config(
     appId = BuildConfig.LINKME_APP_ID,
-    appKey = BuildConfig.LINKME_APP_KEY
+    appKey = BuildConfig.LINKME_APP_KEY,
+    debug = BuildConfig.DEBUG
   )
 )
 ```

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.util.Log
 import com.android.installreferrer.api.InstallReferrerClient
 import com.android.installreferrer.api.InstallReferrerStateListener
 import com.android.installreferrer.api.ReferrerDetails
@@ -38,6 +39,7 @@ class LinkMe private constructor() {
         val sendDeviceInfo: Boolean = true,
         val includeVendorId: Boolean = true,
         val includeAdvertisingId: Boolean = false,
+        val debug: Boolean = false,
     )
 
     private var config: Config? = null
@@ -54,6 +56,14 @@ class LinkMe private constructor() {
         this.config = config
         this.advertisingConsentEnabled = config.includeAdvertisingId
         this.appContext = context.applicationContext
+        debugLog(
+            "configure",
+            mapOf(
+                "baseUrl" to config.baseUrl,
+                "appId" to (config.appId ?: "none"),
+                "debug" to config.debug
+            )
+        )
         // Drain any pending URIs
         val toProcess = ArrayList(pendingUris)
         pendingUris.clear()
@@ -82,37 +92,63 @@ class LinkMe private constructor() {
     }
 
     companion object {
+        private const val TAG = "LinkMe"
         @JvmStatic
         val shared: LinkMe by lazy { LinkMe() }
+    }
+
+    private fun debugLog(message: String, attrs: Map<String, Any?>? = null, error: Throwable? = null) {
+        if (config?.debug != true) return
+        val details = attrs?.entries
+            ?.joinToString(", ") { "${it.key}=${it.value}" }
+            ?.let { " {$it}" }
+            ?: ""
+        if (error != null) {
+            Log.d(TAG, "[LinkMe] $message$details", error)
+        } else {
+            Log.d(TAG, "[LinkMe] $message$details")
+        }
     }
 
     // MARK: - Public link handlers
     fun onNewIntent(intent: Intent?) {
         val data = intent?.data ?: return
+        debugLog("onNewIntent", mapOf("data" to data.toString()))
         handleUri(data)
     }
 
     fun handleIntent(intent: Intent?) { onNewIntent(intent) }
 
     fun claimDeferredIfAvailable(context: Context, callback: (LinkPayload?) -> Unit) {
+        debugLog("claimDeferred.start")
         val client = InstallReferrerClient.newBuilder(context).build()
         client.startConnection(object : InstallReferrerStateListener {
             override fun onInstallReferrerSetupFinished(responseCode: Int) {
                 var handled = false
                 if (responseCode == InstallReferrerClient.InstallReferrerResponse.OK) {
+                    debugLog("installReferrer.connected")
                     try {
                         val response: ReferrerDetails = client.installReferrer
                         val referrer = response.installReferrer // e.g., utm_source=...&cid=abc
                         val uri = Uri.parse("https://dummy/?$referrer")
                         val cid = uri.getQueryParameter("cid")
                         if (cid != null) {
+                            debugLog("installReferrer.cid_found", mapOf("cid" to cid))
                             handled = true
                             resolveCid(cid) { p -> callback(p) }
                         }
-                    } catch (_: Throwable) { /* fall through to POST */ }
+                    } catch (t: Throwable) {
+                        debugLog("installReferrer.error", error = t)
+                        /* fall through to POST */
+                    }
+                } else {
+                    debugLog("installReferrer.unavailable", mapOf("responseCode" to responseCode))
                 }
                 try { client.endConnection() } catch (_: Throwable) {}
-                if (!handled) fallbackDeferredClaim(context, callback)
+                if (!handled) {
+                    debugLog("installReferrer.fallback")
+                    fallbackDeferredClaim(context, callback)
+                }
             }
             override fun onInstallReferrerServiceDisconnected() { /* no-op */ }
         })
@@ -147,13 +183,17 @@ class LinkMe private constructor() {
     // MARK: - Internal
     private fun handleUri(uri: Uri) {
         if (config == null) {
+            debugLog("handleUri.pending", mapOf("uri" to uri.toString()))
             pendingUris.add(uri)
             return
         }
+        debugLog("handleUri", mapOf("uri" to uri.toString()))
         val cid = uri.getQueryParameter("cid")
         if (cid != null) {
+            debugLog("handleUri.cid", mapOf("cid" to cid))
             resolveCid(cid) { }
         } else if ((uri.scheme ?: "").startsWith("http")) {
+            debugLog("handleUri.universal", mapOf("url" to uri.toString()))
             resolveUniversalLink(uri) { }
         }
     }
@@ -162,6 +202,7 @@ class LinkMe private constructor() {
         val cfg = config ?: return done(null)
         serial.execute {
             try {
+                debugLog("resolveCid.request", mapOf("cid" to cid))
                 val endpoint = cfg.baseUrl.trimEnd('/') + "/api/deeplink?cid=" + encode(cid)
                 val url = URL(endpoint)
                 val conn = (url.openConnection() as HttpURLConnection)
@@ -176,9 +217,13 @@ class LinkMe private constructor() {
                     val json = stream.bufferedReader().readText()
                     val payload = parsePayload(json)
                     if (payload != null) emit(payload)
+                    debugLog("resolveCid.success", mapOf("cid" to cid, "hasPayload" to (payload != null)))
                     done(payload)
                 }
-            } catch (_: Throwable) { done(null) }
+            } catch (t: Throwable) {
+                debugLog("resolveCid.error", mapOf("cid" to cid), t)
+                done(null)
+            }
         }
     }
 
@@ -186,6 +231,7 @@ class LinkMe private constructor() {
         val cfg = config ?: return done(null)
         serial.execute {
             try {
+                debugLog("resolveUniversal.request", mapOf("url" to uri.toString()))
                 val url = URL(cfg.baseUrl.trimEnd('/') + "/api/deeplink/resolve-url")
                 val conn = (url.openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
@@ -201,9 +247,13 @@ class LinkMe private constructor() {
                     val resp = stream.bufferedReader().readText()
                     val payload = parsePayload(resp)
                     if (payload != null) emit(payload)
+                    debugLog("resolveUniversal.success", mapOf("url" to uri.toString(), "hasPayload" to (payload != null)))
                     done(payload)
                 }
-            } catch (_: Throwable) { done(null) }
+            } catch (t: Throwable) {
+                debugLog("resolveUniversal.error", mapOf("url" to uri.toString()), t)
+                done(null)
+            }
         }
     }
 
@@ -211,6 +261,7 @@ class LinkMe private constructor() {
         val cfg = config ?: return callback(null)
         serial.execute {
             try {
+                debugLog("deferred.claim.request", mapOf("platform" to "android"))
                 val url = URL(cfg.baseUrl.trimEnd('/') + "/api/deferred/claim")
                 val conn = (url.openConnection() as HttpURLConnection)
                 conn.requestMethod = "POST"
@@ -228,9 +279,13 @@ class LinkMe private constructor() {
                     val resp = stream.bufferedReader().readText()
                     val payload = parsePayload(resp)
                     if (payload != null) emit(payload)
+                    debugLog("deferred.claim.success", mapOf("hasPayload" to (payload != null)))
                     callback(payload)
                 }
-            } catch (_: Throwable) { callback(null) }
+            } catch (t: Throwable) {
+                debugLog("deferred.claim.error", error = t)
+                callback(null)
+            }
         }
     }
 

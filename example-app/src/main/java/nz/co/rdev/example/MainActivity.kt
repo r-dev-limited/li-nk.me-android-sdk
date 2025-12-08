@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
                         sendDeviceInfo = true,
                         includeVendorId = true,
                         includeAdvertisingId = false,
+                        debug = BuildConfig.DEBUG,
                     )
                 )
                 initialized = true
