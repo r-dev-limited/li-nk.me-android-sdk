@@ -130,12 +130,10 @@ class LinkMe private constructor() {
                     try {
                         val response: ReferrerDetails = client.installReferrer
                         val referrer = response.installReferrer // e.g., utm_source=...&cid=abc
-                        val uri = Uri.parse("https://dummy/?$referrer")
-                        val cid = uri.getQueryParameter("cid")
-                        if (cid != null) {
-                            debugLog("installReferrer.cid_found", mapOf("cid" to cid))
+                        if (!referrer.isNullOrBlank()) {
+                            debugLog("installReferrer.referrer_present")
                             handled = true
-                            resolveCid(cid) { p -> callback(p) }
+                            claimFromInstallReferrer(referrer) { p -> callback(p) }
                         }
                     } catch (t: Throwable) {
                         debugLog("installReferrer.error", error = t)
@@ -222,6 +220,33 @@ class LinkMe private constructor() {
                 }
             } catch (t: Throwable) {
                 debugLog("resolveCid.error", mapOf("cid" to cid), t)
+                done(null)
+            }
+        }
+    }
+
+    private fun claimFromInstallReferrer(referrer: String, done: (LinkPayload?) -> Unit) {
+        val cfg = config ?: return done(null)
+        serial.execute {
+            try {
+                debugLog("installReferrer.claim.request")
+                val url = URL(cfg.baseUrl.trimEnd('/') + "/api/install-referrer")
+                val conn = (url.openConnection() as HttpURLConnection)
+                conn.requestMethod = "POST"
+                setHeaders(conn)
+                conn.setRequestProperty("Content-Type", "application/json")
+                conn.doOutput = true
+                val body = mutableMapOf<String, Any>("referrer" to referrer)
+                conn.outputStream.use { it.write(toJson(body).toByteArray()) }
+                conn.inputStream.use { stream ->
+                    val resp = stream.bufferedReader().readText()
+                    val payload = parsePayload(resp)
+                    if (payload != null) emit(payload)
+                    debugLog("installReferrer.claim.success", mapOf("hasPayload" to (payload != null)))
+                    done(payload)
+                }
+            } catch (t: Throwable) {
+                debugLog("installReferrer.claim.error", error = t)
                 done(null)
             }
         }

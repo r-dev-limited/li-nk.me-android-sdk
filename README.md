@@ -9,7 +9,7 @@ Android SDK for LinkMe — deep linking and attribution.
 ## Installation
 
 ```kotlin
-implementation("me.li-nk:linkmekit:0.2.0")
+implementation("me.li-nk:linkmekit:0.2.3")
 ```
 
 ## Basic Usage
@@ -26,6 +26,10 @@ LinkMe.shared.configure(
 ```
 
 For full documentation, guides, and API reference, please visit our [Help Center](https://li-nk.me/docs/help).
+
+## Deferred linking (Android)
+- Deterministic claim uses **Play Install Referrer** (`/api/install-referrer`).
+- Fallback uses probabilistic fingerprint claim (`/api/deferred/claim`).
 
 ## License
 
