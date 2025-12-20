@@ -165,12 +165,12 @@ class LinkMe private constructor() {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
                 val body = mutableMapOf<String, Any?>(
-                    "event" to event,
+                    "type" to event,
                     "platform" to "android",
                     "timestamp" to (System.currentTimeMillis() / 1000)
                 )
                 userId?.let { body["userId"] = it }
-                props?.let { body["props"] = it }
+                props?.let { body["detail"] = toJson(it) }
                 val json = toJson(body)
                 conn.outputStream.use { it.write(json.toByteArray()) }
                 conn.inputStream.bufferedReader().use { it.readText() }
