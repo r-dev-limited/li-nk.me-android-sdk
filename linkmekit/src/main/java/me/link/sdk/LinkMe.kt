@@ -23,9 +23,24 @@ data class LinkPayload(
     val params: Map<String, String>? = null,
     val utm: Map<String, String>? = null,
     val custom: Map<String, String>? = null,
+    val url: String? = null,
+    val isLinkMe: Boolean? = null,
 )
 
 class LinkMe private constructor() {
+    private val utmKeys = setOf(
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+        "utm_term",
+        "utm_content",
+        "utm_id",
+        "utm_source_platform",
+        "utm_creative_format",
+        "utm_marketing_tactic",
+        "tags"
+    )
+
     data class Config(
         val baseUrl: String,
         val appId: String? = null,
@@ -213,7 +228,7 @@ class LinkMe private constructor() {
                 }
                 conn.inputStream.use { stream ->
                     val json = stream.bufferedReader().readText()
-                    val payload = parsePayload(json)
+                    val payload = annotatePayload(parsePayload(json), true)
                     if (payload != null) emit(payload)
                     debugLog("resolveCid.success", mapOf("cid" to cid, "hasPayload" to (payload != null)))
                     done(payload)
@@ -240,7 +255,7 @@ class LinkMe private constructor() {
                 conn.outputStream.use { it.write(toJson(body).toByteArray()) }
                 conn.inputStream.use { stream ->
                     val resp = stream.bufferedReader().readText()
-                    val payload = parsePayload(resp)
+                    val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) emit(payload)
                     debugLog("installReferrer.claim.success", mapOf("hasPayload" to (payload != null)))
                     done(payload)
@@ -268,12 +283,24 @@ class LinkMe private constructor() {
                 if (cfg.sendDeviceInfo && dev != null) body["device"] = dev
                 val json = toJson(body)
                 conn.outputStream.use { it.write(json.toByteArray()) }
-                conn.inputStream.use { stream ->
-                    val resp = stream.bufferedReader().readText()
-                    val payload = parsePayload(resp)
+                val status = conn.responseCode
+                val stream = if (status in 200..299) conn.inputStream else conn.errorStream
+                val resp = stream?.bufferedReader()?.use { it.readText() } ?: ""
+                if (status in 200..299) {
+                    val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) emit(payload)
                     debugLog("resolveUniversal.success", mapOf("url" to uri.toString(), "hasPayload" to (payload != null)))
                     done(payload)
+                } else {
+                    if (isDomainNotFound(resp)) {
+                        val fallback = buildBasicUniversalPayload(uri)
+                        emit(fallback)
+                        debugLog("resolveUniversal.non_linkme", mapOf("url" to uri.toString()))
+                        done(fallback)
+                        return@execute
+                    }
+                    debugLog("resolveUniversal.http_error", mapOf("url" to uri.toString(), "status" to status))
+                    done(null)
                 }
             } catch (t: Throwable) {
                 debugLog("resolveUniversal.error", mapOf("url" to uri.toString()), t)
@@ -302,7 +329,7 @@ class LinkMe private constructor() {
                 conn.outputStream.use { it.write(toJson(body).toByteArray()) }
                 conn.inputStream.use { stream ->
                     val resp = stream.bufferedReader().readText()
-                    val payload = parsePayload(resp)
+                    val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) emit(payload)
                     debugLog("deferred.claim.success", mapOf("hasPayload" to (payload != null)))
                     callback(payload)
@@ -335,8 +362,45 @@ class LinkMe private constructor() {
             val params = parseStringMap(json, "params")
             val utm = parseStringMap(json, "utm")
             val custom = parseStringMap(json, "custom")
-            LinkPayload(linkId = linkId, path = path, params = params, utm = utm, custom = custom)
+            val url = Regex("\\\"url\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
+            val isLinkMeMatch = Regex("\\\"isLinkMe\\\"\\s*:\\s*(true|false)").find(json)?.groupValues?.getOrNull(1)
+            val isLinkMe = when (isLinkMeMatch) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+            LinkPayload(linkId = linkId, path = path, params = params, utm = utm, custom = custom, url = url, isLinkMe = isLinkMe)
         } catch (_: Throwable) { null }
+    }
+
+    private fun annotatePayload(payload: LinkPayload?, isLinkMe: Boolean? = true): LinkPayload? {
+        if (payload == null) return null
+        val next = payload.isLinkMe ?: isLinkMe
+        return if (next == payload.isLinkMe) payload else payload.copy(isLinkMe = next)
+    }
+
+    private fun buildBasicUniversalPayload(uri: Uri): LinkPayload {
+        val (params, utm) = splitQueryParams(uri)
+        val path = uri.path ?: "/"
+        return LinkPayload(path = path, params = params, utm = utm, url = uri.toString(), isLinkMe = false)
+    }
+
+    private fun splitQueryParams(uri: Uri): Pair<Map<String, String>?, Map<String, String>?> {
+        val params = mutableMapOf<String, String>()
+        val utm = mutableMapOf<String, String>()
+        for (key in uri.queryParameterNames) {
+            val value = uri.getQueryParameter(key) ?: continue
+            if (utmKeys.contains(key)) {
+                utm[key] = value
+            } else {
+                params[key] = value
+            }
+        }
+        return Pair(if (params.isEmpty()) null else params, if (utm.isEmpty()) null else utm)
+    }
+
+    private fun isDomainNotFound(json: String): Boolean {
+        return Regex("\\\"error\\\"\\s*:\\s*\\\"domain_not_found\\\"").containsMatchIn(json)
     }
 
     private fun parseStringMap(json: String, key: String): Map<String, String>? {
