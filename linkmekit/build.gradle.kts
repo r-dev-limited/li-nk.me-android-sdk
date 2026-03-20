@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "me.li-nk"
-version = "0.2.7"
+version = "0.2.9"
 
 android {
     namespace = "me.link.sdk"
