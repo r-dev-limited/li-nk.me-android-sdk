@@ -9,7 +9,7 @@ Android SDK for LinkMe — deep linking and attribution.
 ## Installation
 
 ```kotlin
-implementation("me.li-nk:linkmekit:0.2.7")
+implementation("me.li-nk:linkmekit:0.2.9")
 ```
 
 ## Basic Usage
@@ -18,6 +18,7 @@ implementation("me.li-nk:linkmekit:0.2.7")
 LinkMe.shared.configure(
   context = applicationContext,
   config = LinkMe.Config(
+    baseUrl = "https://li-nk.me",
     appId = BuildConfig.LINKME_APP_ID,
     appKey = BuildConfig.LINKME_APP_KEY,
     debug = BuildConfig.DEBUG
@@ -25,11 +26,24 @@ LinkMe.shared.configure(
 )
 ```
 
-For full documentation, guides, and API reference, please visit our [Help Center](https://li-nk.me/docs/help).
+## API
+
+| Method | Description |
+| --- | --- |
+| `configure(context, config)` | Initialize the SDK. |
+| `handleIntent(intent)` / `onNewIntent(intent)` | Feed intents for link parsing. |
+| `getInitialLink(callback)` | Get the payload that opened the app. |
+| `addListener(handler)` | Subscribe to future payloads. Returns unsubscribe function. |
+| `claimDeferredIfAvailable(context, callback)` | Install Referrer + fingerprint fallback. |
+| `track(event, props?)` | Send analytics events. |
+| `setUserId(id)` | Associate a user ID. |
+| `setAdvertisingConsent(granted)` | Toggle Advertising ID usage. |
 
 ## Deferred linking (Android)
 - Deterministic claim uses **Play Install Referrer** (`/api/install-referrer`).
 - Fallback uses probabilistic fingerprint claim (`/api/deferred/claim`).
+
+For full documentation, guides, and API reference, please visit our [Help Center](https://li-nk.me/docs/help).
 
 ## License
 
