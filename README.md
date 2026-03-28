@@ -25,6 +25,42 @@ LinkMe.shared.configure(
 )
 ```
 
+## Manual deep-link setup (equivalent to React Native plugin)
+
+If you are comparing to React Native Expo plugin config:
+
+```json
+{
+  "hosts": ["links.yourco.com"],
+  "associatedDomains": ["links.yourco.com"],
+  "schemes": ["yourapp"]
+}
+```
+
+configure Android manually as:
+
+- `hosts` / `associatedDomains` -> HTTPS App Links intent filter:
+
+```xml
+<intent-filter android:autoVerify="true">
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  <data android:scheme="https" android:host="links.yourco.com" />
+</intent-filter>
+```
+
+- `schemes` -> custom scheme intent filter:
+
+```xml
+<intent-filter>
+  <action android:name="android.intent.action.VIEW" />
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+  <data android:scheme="yourapp" />
+</intent-filter>
+```
+
 ## API
 
 | Method | Description |
