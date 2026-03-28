@@ -18,7 +18,6 @@ implementation("me.li-nk:linkmekit:0.2.9")
 LinkMe.shared.configure(
   context = applicationContext,
   config = LinkMe.Config(
-    baseUrl = "https://li-nk.me",
     appId = BuildConfig.LINKME_APP_ID,
     appKey = BuildConfig.LINKME_APP_KEY,
     debug = BuildConfig.DEBUG
