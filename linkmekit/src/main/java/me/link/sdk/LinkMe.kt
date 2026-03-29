@@ -25,6 +25,8 @@ data class LinkPayload(
     val custom: Map<String, String>? = null,
     val url: String? = null,
     val isLinkMe: Boolean? = null,
+    val forceRedirectWeb: Boolean? = null,
+    val webFallbackUrl: String? = null,
 )
 
 class LinkMe private constructor() {
@@ -229,7 +231,11 @@ class LinkMe private constructor() {
                 conn.inputStream.use { stream ->
                     val json = stream.bufferedReader().readText()
                     val payload = annotatePayload(parsePayload(json), true)
-                    if (payload != null) emit(payload)
+                    if (payload != null) {
+                        if (!handleForcedWebRedirect(payload)) {
+                            emit(payload)
+                        }
+                    }
                     debugLog("resolveCid.success", mapOf("cid" to cid, "hasPayload" to (payload != null)))
                     done(payload)
                 }
@@ -256,7 +262,11 @@ class LinkMe private constructor() {
                 conn.inputStream.use { stream ->
                     val resp = stream.bufferedReader().readText()
                     val payload = annotatePayload(parsePayload(resp), true)
-                    if (payload != null) emit(payload)
+                    if (payload != null) {
+                        if (!handleForcedWebRedirect(payload)) {
+                            emit(payload)
+                        }
+                    }
                     debugLog("installReferrer.claim.success", mapOf("hasPayload" to (payload != null)))
                     done(payload)
                 }
@@ -288,7 +298,11 @@ class LinkMe private constructor() {
                 val resp = stream?.bufferedReader()?.use { it.readText() } ?: ""
                 if (status in 200..299) {
                     val payload = annotatePayload(parsePayload(resp), true)
-                    if (payload != null) emit(payload)
+                    if (payload != null) {
+                        if (!handleForcedWebRedirect(payload)) {
+                            emit(payload)
+                        }
+                    }
                     debugLog("resolveUniversal.success", mapOf("url" to uri.toString(), "hasPayload" to (payload != null)))
                     done(payload)
                 } else {
@@ -330,7 +344,11 @@ class LinkMe private constructor() {
                 conn.inputStream.use { stream ->
                     val resp = stream.bufferedReader().readText()
                     val payload = annotatePayload(parsePayload(resp), true)
-                    if (payload != null) emit(payload)
+                    if (payload != null) {
+                        if (!handleForcedWebRedirect(payload)) {
+                            emit(payload)
+                        }
+                    }
                     debugLog("deferred.claim.success", mapOf("hasPayload" to (payload != null)))
                     callback(payload)
                 }
@@ -369,7 +387,24 @@ class LinkMe private constructor() {
                 "false" -> false
                 else -> null
             }
-            LinkPayload(linkId = linkId, path = path, params = params, utm = utm, custom = custom, url = url, isLinkMe = isLinkMe)
+            val forceRedirectWebMatch = Regex("\\\"forceRedirectWeb\\\"\\s*:\\s*(true|false)").find(json)?.groupValues?.getOrNull(1)
+            val forceRedirectWeb = when (forceRedirectWebMatch) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+            val webFallbackUrl = Regex("\\\"webFallbackUrl\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
+            LinkPayload(
+                linkId = linkId,
+                path = path,
+                params = params,
+                utm = utm,
+                custom = custom,
+                url = url,
+                isLinkMe = isLinkMe,
+                forceRedirectWeb = forceRedirectWeb,
+                webFallbackUrl = webFallbackUrl
+            )
         } catch (_: Throwable) { null }
     }
 
@@ -377,6 +412,28 @@ class LinkMe private constructor() {
         if (payload == null) return null
         val next = payload.isLinkMe ?: isLinkMe
         return if (next == payload.isLinkMe) payload else payload.copy(isLinkMe = next)
+    }
+
+    private fun handleForcedWebRedirect(payload: LinkPayload): Boolean {
+        if (payload.forceRedirectWeb != true) return false
+        val raw = payload.webFallbackUrl?.trim()
+        if (raw.isNullOrEmpty()) {
+            debugLog("forceWeb.enabled_but_missing_url", mapOf("linkId" to payload.linkId))
+            return false
+        }
+        return try {
+            val ctx = appContext ?: return false
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(raw)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+            debugLog("forceWeb.browser_open", mapOf("linkId" to payload.linkId, "url" to raw))
+            true
+        } catch (t: Throwable) {
+            debugLog("forceWeb.browser_open_failed", mapOf("url" to raw), t)
+            false
+        }
     }
 
     private fun buildBasicUniversalPayload(uri: Uri): LinkPayload {
