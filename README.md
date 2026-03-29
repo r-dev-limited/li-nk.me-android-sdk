@@ -25,9 +25,9 @@ LinkMe.shared.configure(
 )
 ```
 
-## Manual deep-link setup mapping
+## Manual deep-link config mapping
 
-Use this config shape for your app setup values:
+Use these values for your Android deep-link setup:
 
 ```json
 {
@@ -37,29 +37,13 @@ Use this config shape for your app setup values:
 }
 ```
 
-configure Android manually as:
+What each field does and why it must be set:
 
-- `hosts` / `associatedDomains` -> HTTPS App Links intent filter:
+- `hosts`: HTTPS deep-link domain(s), mapped to verified App Links intent filters.
+- `associatedDomains`: keep aligned with `hosts`; this is the same domain set used for verification on Android.
+- `schemes`: fallback custom URL scheme(s) for explicit scheme opens.
 
-```xml
-<intent-filter android:autoVerify="true">
-  <action android:name="android.intent.action.VIEW" />
-  <category android:name="android.intent.category.DEFAULT" />
-  <category android:name="android.intent.category.BROWSABLE" />
-  <data android:scheme="https" android:host="links.yourco.com" />
-</intent-filter>
-```
-
-- `schemes` -> custom scheme intent filter:
-
-```xml
-<intent-filter>
-  <action android:name="android.intent.action.VIEW" />
-  <category android:name="android.intent.category.DEFAULT" />
-  <category android:name="android.intent.category.BROWSABLE" />
-  <data android:scheme="yourapp" />
-</intent-filter>
-```
+Required: if `hosts` / `schemes` are not declared in `AndroidManifest.xml`, LinkMe links will not route reliably into your app.
 
 ## API
 
