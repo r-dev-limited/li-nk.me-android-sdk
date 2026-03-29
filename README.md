@@ -9,7 +9,7 @@ Android SDK for LinkMe — deep linking and attribution.
 ## Installation
 
 ```kotlin
-implementation("me.li-nk:linkmekit:0.2.10")
+implementation("me.li-nk:linkmekit:0.2.11")
 ```
 
 ## Basic Usage
