@@ -24,15 +24,16 @@ android {
             ?: propBase?.takeIf { it.isNotBlank() }
             ?: "http://10.0.2.2:8080")
 
-        buildConfigField("String", "LINKME_BASE_URL", "\"$linkmeBaseUrl\"")
-        manifestPlaceholders["LINKME_BASE_URL"] = linkmeBaseUrl
-
         // App Links host placeholder for manifest (defaults to li-nk.me)
         val envHost = System.getenv("LINKME_APP_LINKS_HOST")
         val propHost = project.findProperty("LINKME_APP_LINKS_HOST") as String?
         val appLinksHost = (envHost?.takeIf { it.isNotBlank() }
             ?: propHost?.takeIf { it.isNotBlank() }
             ?: "li-nk.me")
+
+        buildConfigField("String", "LINKME_BASE_URL", "\"$linkmeBaseUrl\"")
+        buildConfigField("String", "LINKME_APP_LINKS_HOST", "\"$appLinksHost\"")
+        manifestPlaceholders["LINKME_BASE_URL"] = linkmeBaseUrl
         manifestPlaceholders["LINKME_APP_LINKS_HOST"] = appLinksHost
     }
 
