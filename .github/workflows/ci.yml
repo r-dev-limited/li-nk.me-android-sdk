@@ -9,37 +9,39 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-java@v6.0.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - run: ./gradlew :linkmekit:testDebugUnitTest :linkmekit:lintDebug :linkmekit:assembleRelease :linkmekit:assembleMinifiedRelease :example-app:assembleDebug :example-app:assembleMinifiedRelease
 
   instrumentation:
     name: Android instrumentation (API 35)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-java@v6.0.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6.3.0
       - name: Run example app instrumentation tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
           api-level: 35
           target: google_apis
           arch: x86_64
           profile: pixel_2
           disable-animations: true
+          # API 35 images can take ~15 minutes to boot on hosted runners.
+          emulator-boot-timeout: 1800
           script: LINKME_BASE_URL=http://127.0.0.1:9 LINKME_APP_LINKS_HOST=localhost ./gradlew :example-app:connectedDebugAndroidTest --stacktrace
       - name: Upload instrumentation reports
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: android-instrumentation-reports
           path: |
