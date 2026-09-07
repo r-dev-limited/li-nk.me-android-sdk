@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
                 
                 // EXAMPLE: Log to Analytics
                 // This helper demonstrates how to map to Firebase and PostHog
-                AnalyticsHelper.logToAnalytics(context, payload)
+                AnalyticsHelper.logToAnalytics(appContext, payload)
             }
 
             fun initializeSdk() {

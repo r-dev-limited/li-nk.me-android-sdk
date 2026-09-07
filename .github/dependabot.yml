@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      android-tooling:
+        patterns: ["*"]

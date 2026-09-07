@@ -2,6 +2,14 @@
 
 All notable changes to the LinkMe Android SDK.
 
+## 0.2.14
+
+- Replaces hand-written JSON parsing with structured JSON and adds parser regression tests.
+- Bounds Install Referrer settlement with fallback, gates device collection, modernizes the Gradle toolchain, and supports clearing user identity.
+- Preserves `cid`/`duplicate` attribution fields and delivers listeners on the main looper.
+- Adds public API R8 keep rules, a minified release verification variant, and an emulator instrumentation smoke test for the example app.
+- Fixes the example app's self-referential XML theme resource.
+
 ## 0.2.13
 
 - Tightens deferred claim parsing to LinkMe hosts/token format only.
