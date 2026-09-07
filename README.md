@@ -2,7 +2,7 @@
 
 Deep linking, deferred deep linking, and attribution for Android apps.
 
-[![Maven Central](https://img.shields.io/maven-central/v/me.li-nk/linkmekit)](https://central.sonatype.com/artifact/me.li-nk/linkmekit)
+[![JitPack](https://jitpack.io/v/r-dev-limited/li-nk.me-android-sdk.svg)](https://jitpack.io/#r-dev-limited/li-nk.me-android-sdk)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 - [Main Site](https://li-nk.me)
@@ -32,7 +32,7 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-  implementation("me.li-nk:linkmekit:0.2.13")
+  implementation("com.github.r-dev-limited:li-nk.me-android-sdk:0.2.14")
 }
 ```
 
@@ -133,7 +133,7 @@ Both are handled automatically by `claimDeferredIfAvailable()`.
 | `addListener(handler)` | Subscribe to future payloads (returns unsubscribe function) |
 | `claimDeferredIfAvailable(context, callback)` | Claim deferred deep link on first install |
 | `track(event, props?)` | Send analytics events |
-| `setUserId(id)` | Associate a user ID |
+| `setUserId(id)` | Associate a user ID; pass `null` to clear it |
 | `setAdvertisingConsent(granted)` | Toggle Advertising ID usage |
 
 ## Troubleshooting

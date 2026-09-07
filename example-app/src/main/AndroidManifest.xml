@@ -7,7 +7,7 @@
 
     <application
         android:label="LinkMe Example"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar"
+        android:theme="@style/Theme.LinkMeExample"
         android:usesCleartextTraffic="true">
         <meta-data
             android:name="LinkMeBaseURL"

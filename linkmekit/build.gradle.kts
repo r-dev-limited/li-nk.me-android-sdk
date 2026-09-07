@@ -7,11 +7,11 @@ plugins {
 }
 
 group = "me.li-nk"
-version = "0.2.13"
+version = "0.2.14"
 
 android {
     namespace = "me.link.sdk"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 23
@@ -26,6 +26,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // Keep the published release artifact stable while exercising the
+        // consumer shrinker in CI. This catches missing keep rules before a
+        // release is uploaded to Maven/JitPack.
+        create("minifiedRelease") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            matchingFallbacks += listOf("release")
         }
     }
     compileOptions {
@@ -45,10 +53,11 @@ android {
 
 dependencies {
     implementation("org.jetbrains.kotlin:kotlin-stdlib")
-    implementation("androidx.annotation:annotation:1.8.0")
+    implementation("androidx.annotation:annotation:1.10.0")
     implementation("com.android.installreferrer:installreferrer:2.2")
-    implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
+    implementation("com.google.android.gms:play-services-ads-identifier:18.3.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20260814")
 }
 
 afterEvaluate {

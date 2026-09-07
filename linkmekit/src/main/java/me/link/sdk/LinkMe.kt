@@ -1,9 +1,12 @@
 package me.link.sdk
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import com.android.installreferrer.api.InstallReferrerClient
@@ -16,6 +19,8 @@ import java.util.Locale
 import java.util.TimeZone
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import org.json.JSONObject
 
 data class LinkPayload(
     val linkId: String? = null,
@@ -27,6 +32,8 @@ data class LinkPayload(
     val isLinkMe: Boolean? = null,
     val forceRedirectWeb: Boolean? = null,
     val webFallbackUrl: String? = null,
+    val cid: String? = null,
+    val duplicate: Boolean? = null,
 )
 
 class LinkMe private constructor() {
@@ -64,6 +71,9 @@ class LinkMe private constructor() {
     private val listeners = CopyOnWriteArrayList<(LinkPayload) -> Unit>()
     private var lastPayload: LinkPayload? = null
     private val serial = Executors.newSingleThreadExecutor()
+    // Keep construction testable in JVM-only unit tests where Android's main looper
+    // is not available; resolve it only when a callback is actually delivered.
+    private val mainHandler by lazy { Handler(Looper.getMainLooper()) }
     private var pendingUris: MutableList<Uri> = mutableListOf()
     private var advertisingConsentEnabled: Boolean = false
 
@@ -139,9 +149,28 @@ class LinkMe private constructor() {
     fun claimDeferredIfAvailable(context: Context, callback: (LinkPayload?) -> Unit) {
         debugLog("claimDeferred.start")
         val client = InstallReferrerClient.newBuilder(context).build()
+        val mainHandler = Handler(Looper.getMainLooper())
+        val settled = AtomicBoolean(false)
+        val fallbackStarted = AtomicBoolean(false)
+        val referrerInFlight = AtomicBoolean(false)
+        lateinit var timeout: Runnable
+        val finish = { payload: LinkPayload? ->
+            if (settled.compareAndSet(false, true)) {
+                val result = if (payload?.forceRedirectWeb == true) null else payload
+                mainHandler.post { callback(result) }
+            }
+        }
+        val startFallback = {
+            if (fallbackStarted.compareAndSet(false, true)) {
+                try { client.endConnection() } catch (_: Throwable) {}
+                mainHandler.removeCallbacks(timeout)
+                fallbackDeferredClaim(context) { payload -> finish(payload) }
+            }
+        }
+        timeout = Runnable { startFallback() }
+        mainHandler.postDelayed(timeout, 6000L)
         client.startConnection(object : InstallReferrerStateListener {
             override fun onInstallReferrerSetupFinished(responseCode: Int) {
-                var handled = false
                 if (responseCode == InstallReferrerClient.InstallReferrerResponse.OK) {
                     debugLog("installReferrer.connected")
                     try {
@@ -149,27 +178,36 @@ class LinkMe private constructor() {
                         val referrer = response.installReferrer // e.g., utm_source=...&cid=abc
                         if (!referrer.isNullOrBlank()) {
                             debugLog("installReferrer.referrer_present")
-                            handled = true
-                            claimFromInstallReferrer(referrer) { p -> callback(p) }
+                            referrerInFlight.set(true)
+                            claimFromInstallReferrer(referrer) { payload ->
+                                referrerInFlight.set(false)
+                                if (payload != null) {
+                                    mainHandler.removeCallbacks(timeout)
+                                    try { client.endConnection() } catch (_: Throwable) {}
+                                    finish(payload)
+                                } else {
+                                    // A stale or malformed referrer must not prevent fingerprint fallback.
+                                    startFallback()
+                                }
+                            }
+                            return
                         }
                     } catch (t: Throwable) {
                         debugLog("installReferrer.error", error = t)
-                        /* fall through to POST */
                     }
                 } else {
                     debugLog("installReferrer.unavailable", mapOf("responseCode" to responseCode))
                 }
-                try { client.endConnection() } catch (_: Throwable) {}
-                if (!handled) {
-                    debugLog("installReferrer.fallback")
-                    fallbackDeferredClaim(context, callback)
-                }
+                startFallback()
             }
-            override fun onInstallReferrerServiceDisconnected() { /* no-op */ }
+            override fun onInstallReferrerServiceDisconnected() {
+                if (!referrerInFlight.get()) startFallback()
+            }
         })
     }
 
-    fun setUserId(id: String) { userId = id }
+    /** Associate events with a user; pass null to clear the current identity. */
+    fun setUserId(id: String?) { userId = id }
 
     fun track(event: String, props: Map<String, Any?>? = null) {
         val cfg = config ?: return
@@ -186,12 +224,16 @@ class LinkMe private constructor() {
                     "platform" to "android",
                     "timestamp" to (System.currentTimeMillis() / 1000)
                 )
+                lastPayload?.cid?.let { body["cid"] = it }
+                lastPayload?.linkId?.let { body["linkId"] = it }
                 userId?.let { body["userId"] = it }
                 props?.let { body["detail"] = toJson(it) }
                 val json = toJson(body)
                 conn.outputStream.use { it.write(json.toByteArray()) }
                 conn.inputStream.bufferedReader().use { it.readText() }
-            } catch (_: Throwable) {}
+            } catch (t: Throwable) {
+                debugLog("track.error", error = t)
+            }
         }
     }
 
@@ -224,17 +266,15 @@ class LinkMe private constructor() {
                 conn.requestMethod = "GET"
                 setHeaders(conn)
                 // Mirror iOS: include device payload header if enabled
-                val dev = buildDevicePayload()
-                if (cfg.sendDeviceInfo && dev != null) {
-                    conn.setRequestProperty("x-linkme-device", toJson(dev))
+                if (cfg.sendDeviceInfo) {
+                    buildDevicePayload()?.let { conn.setRequestProperty("x-linkme-device", toJson(it)) }
                 }
                 conn.inputStream.use { stream ->
                     val json = stream.bufferedReader().readText()
-                    val payload = annotatePayload(parsePayload(json), true)
+                    val parsed = annotatePayload(parsePayload(json), true)
+                    val payload = parsed?.let { if (it.cid == null) it.copy(cid = cid) else it }
                     if (payload != null) {
-                        if (!handleForcedWebRedirect(payload)) {
-                            emit(payload)
-                        }
+                        if (!handleForcedWebRedirect(payload)) emit(payload)
                     }
                     debugLog("resolveCid.success", mapOf("cid" to cid, "hasPayload" to (payload != null)))
                     done(payload)
@@ -263,12 +303,15 @@ class LinkMe private constructor() {
                     val resp = stream.bufferedReader().readText()
                     val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) {
-                        if (!handleForcedWebRedirect(payload)) {
+                        if (handleForcedWebRedirect(payload)) done(payload)
+                        else {
                             emit(payload)
+                            done(payload)
                         }
+                    } else {
+                        done(null)
                     }
                     debugLog("installReferrer.claim.success", mapOf("hasPayload" to (payload != null)))
-                    done(payload)
                 }
             } catch (t: Throwable) {
                 debugLog("installReferrer.claim.error", error = t)
@@ -289,8 +332,7 @@ class LinkMe private constructor() {
                 conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
                 val body = mutableMapOf<String, Any>("url" to uri.toString())
-                val dev = buildDevicePayload()
-                if (cfg.sendDeviceInfo && dev != null) body["device"] = dev
+                if (cfg.sendDeviceInfo) buildDevicePayload()?.let { body["device"] = it }
                 val json = toJson(body)
                 conn.outputStream.use { it.write(json.toByteArray()) }
                 val status = conn.responseCode
@@ -299,9 +341,7 @@ class LinkMe private constructor() {
                 if (status in 200..299) {
                     val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) {
-                        if (!handleForcedWebRedirect(payload)) {
-                            emit(payload)
-                        }
+                        if (!handleForcedWebRedirect(payload)) emit(payload)
                     }
                     debugLog("resolveUniversal.success", mapOf("url" to uri.toString(), "hasPayload" to (payload != null)))
                     done(payload)
@@ -338,19 +378,21 @@ class LinkMe private constructor() {
                     "bundleId" to context.packageName,
                     "platform" to "android",
                 )
-                val dev = buildDevicePayload()
-                if (cfg.sendDeviceInfo && dev != null) body["device"] = dev
+                if (cfg.sendDeviceInfo) buildDevicePayload()?.let { body["device"] = it }
                 conn.outputStream.use { it.write(toJson(body).toByteArray()) }
                 conn.inputStream.use { stream ->
                     val resp = stream.bufferedReader().readText()
                     val payload = annotatePayload(parsePayload(resp), true)
                     if (payload != null) {
-                        if (!handleForcedWebRedirect(payload)) {
+                        if (handleForcedWebRedirect(payload)) callback(null)
+                        else {
                             emit(payload)
+                            callback(payload)
                         }
+                    } else {
+                        callback(null)
                     }
                     debugLog("deferred.claim.success", mapOf("hasPayload" to (payload != null)))
-                    callback(payload)
                 }
             } catch (t: Throwable) {
                 debugLog("deferred.claim.error", error = t)
@@ -368,43 +410,40 @@ class LinkMe private constructor() {
     }
 
     private fun emit(payload: LinkPayload) {
-        lastPayload = payload
-        listeners.forEach { it(payload) }
+        val deliver = {
+            lastPayload = payload
+            listeners.forEach { it(payload) }
+        }
+        if (Looper.myLooper() == Looper.getMainLooper()) deliver() else mainHandler.post(deliver)
     }
 
-    // Minimal JSON handling without dependencies
-    private fun parsePayload(json: String): LinkPayload? {
+    // Android's platform JSON parser preserves escaped strings and Unicode correctly.
+    internal fun parsePayload(json: String): LinkPayload? {
         return try {
-            val linkId = Regex("\\\"linkId\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
-            val path = Regex("\\\"path\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
-            val params = parseStringMap(json, "params")
-            val utm = parseStringMap(json, "utm")
-            val custom = parseStringMap(json, "custom")
-            val url = Regex("\\\"url\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
-            val isLinkMeMatch = Regex("\\\"isLinkMe\\\"\\s*:\\s*(true|false)").find(json)?.groupValues?.getOrNull(1)
-            val isLinkMe = when (isLinkMeMatch) {
-                "true" -> true
-                "false" -> false
-                else -> null
+            val obj = JSONObject(json)
+            fun string(name: String): String? {
+                val value = obj.opt(name)
+                return (value as? String)?.takeIf { it.isNotEmpty() }
             }
-            val forceRedirectWebMatch = Regex("\\\"forceRedirectWeb\\\"\\s*:\\s*(true|false)").find(json)?.groupValues?.getOrNull(1)
-            val forceRedirectWeb = when (forceRedirectWebMatch) {
-                "true" -> true
-                "false" -> false
-                else -> null
-            }
-            val webFallbackUrl = Regex("\\\"webFallbackUrl\\\"\\s*:\\s*\\\"([^\\\"]*)").find(json)?.groupValues?.getOrNull(1)
-            LinkPayload(
-                linkId = linkId,
-                path = path,
-                params = params,
-                utm = utm,
-                custom = custom,
-                url = url,
-                isLinkMe = isLinkMe,
-                forceRedirectWeb = forceRedirectWeb,
-                webFallbackUrl = webFallbackUrl
+            fun bool(name: String): Boolean? = obj.opt(name) as? Boolean
+            val payload = LinkPayload(
+                cid = string("cid"),
+                linkId = string("linkId"),
+                path = string("path"),
+                params = parseStringMap(obj.optJSONObject("params")),
+                utm = parseStringMap(obj.optJSONObject("utm")),
+                custom = parseStringMap(obj.optJSONObject("custom")),
+                url = string("url"),
+                isLinkMe = bool("isLinkMe"),
+                duplicate = bool("duplicate"),
+                forceRedirectWeb = bool("forceRedirectWeb"),
+                webFallbackUrl = string("webFallbackUrl")
             )
+            if (payload.cid == null && payload.linkId == null && payload.path == null && payload.params == null &&
+                payload.utm == null && payload.custom == null && payload.url == null &&
+                payload.isLinkMe == null && payload.duplicate == null && payload.forceRedirectWeb == null &&
+                payload.webFallbackUrl == null
+            ) null else payload
         } catch (_: Throwable) { null }
     }
 
@@ -460,28 +499,22 @@ class LinkMe private constructor() {
         return Regex("\\\"error\\\"\\s*:\\s*\\\"domain_not_found\\\"").containsMatchIn(json)
     }
 
-    private fun parseStringMap(json: String, key: String): Map<String, String>? {
-        val block = Regex("\\\"" + Regex.escape(key) + "\\\"\\s*:\\s*\\{([^}]*)\\}")
-            .find(json)?.groupValues?.getOrNull(1) ?: return null
+    private fun parseStringMap(obj: JSONObject?): Map<String, String>? {
+        if (obj == null) return null
         val map = mutableMapOf<String, String>()
-        Regex("\\\"([^\\\"]+)\\\"\\s*:\\s*\\\"([^\\\"]*)\\\"")
-            .findAll(block)
-            .forEach { m -> map[m.groupValues[1]] = m.groupValues[2] }
+        val keys = obj.keys()
+        while (keys.hasNext()) {
+            val key = keys.next()
+            if (!obj.isNull(key)) (obj.opt(key) as? String)?.let { map[key] = it }
+        }
         return if (map.isEmpty()) null else map
     }
 
     private fun toJson(map: Map<String, Any?>): String {
-        // Minimal serializer for simple maps; only handles primitives and nested maps
-        fun anyToJson(v: Any?): String = when (v) {
-            null -> "null"
-            is String -> "\"" + v.replace("\"", "\\\"") + "\""
-            is Number, is Boolean -> v.toString()
-            is Map<*, *> -> "{" + v.entries.joinToString(",") { anyToJson(it.key.toString()) + ":" + anyToJson(it.value) } + "}"
-            else -> "\"" + v.toString().replace("\"", "\\\"") + "\""
-        }
-        return anyToJson(map)
+        return JSONObject(map).toString()
     }
 
+    @SuppressLint("HardwareIds")
     private fun buildDevicePayload(): Map<String, Any>? {
         val cfg = config ?: return null
         val dev = mutableMapOf<String, Any>()
