@@ -2,6 +2,12 @@
 
 All notable changes to the LinkMe Android SDK.
 
+## Unreleased
+
+- Upgrade Kotlin and the Compose compiler to 2.3.21 and migrate JVM targets to the compilerOptions DSL.
+- Upgrade AndroidX annotations to 1.11.0, activity-compose to 1.13.0, Compose BOM to 2026.06.01, AndroidX JUnit to 1.3.0, and Espresso to 3.7.0.
+- Keep AGP 8.13.2, compile SDK 36, and core-ktx 1.18.0; newer Compose and Core artifacts require AGP 9.1 and compile SDK 37.
+
 ## 0.2.14
 
 - Replaces hand-written JSON parsing with structured JSON and adds parser regression tests.
