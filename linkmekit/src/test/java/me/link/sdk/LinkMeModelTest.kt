@@ -34,4 +34,16 @@ class LinkMeModelTest {
         assertEquals("line\nfeed", payload?.custom?.get("control"))
         assertEquals(false, payload?.duplicate)
     }
+
+    @Test
+    fun claimPolicyMetadataIsPreserved() {
+        val fixture = javaClass.getResourceAsStream("/link-payload.claim-policy-v2.json")!!.bufferedReader().use { it.readText() }
+        val payload = LinkMe.shared.parsePayload(fixture)
+        assertEquals("direct_cid", payload?.claimMethod)
+        assertEquals("high", payload?.matchConfidence)
+        assertEquals("deterministic", payload?.attributionStatus)
+        assertEquals(2, payload?.claimPolicyVersion)
+        assertEquals(1, payload?.contractVersion)
+        assertEquals("e325270c-35a9-4380-a423-c338c4a1bd1f", payload?.claimId)
+    }
 }
