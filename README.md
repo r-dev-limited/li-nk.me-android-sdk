@@ -150,3 +150,92 @@ The `example-app/` directory contains a runnable sample. Set `LINKME_APP_ID` and
 ## License
 
 Apache-2.0
+
+## Claim metadata (unreleased)
+
+Updated Edge claims can include `claimId`, `claimMethod`, `matchConfidence`,
+`attributionStatus`, `contractVersion`, and `claimPolicyVersion`. These optional
+fields are preserved in the payload. Treat `fingerprint_exact` / `inferred` as
+heuristic attribution, not a verified install or authenticated identity.
+Replaying a CID returns its saved outcome; `duplicate` is a deprecated legacy
+projection and must not suppress a new link navigation based on shared IP/UA.
+
+Supply your app ID for deferred matching. New apps have fingerprint fallback
+disabled; enable inferred attribution explicitly in app settings if appropriate.
+Enabled matching requires a unique exact IP/UA candidate within 30 minutes.
+Explicit CID and Play referrer claims use the deterministic 72-hour token window,
+subject to link expiry and current app/link/domain policy.
+
+
+Fingerprint matches return campaign/claim metadata with `navigationAllowed: false`.
+They withhold the CID, link ID, path, custom data, query parameters and destination
+URLs. The SDK suppresses app-routing callbacks and automatic browser launches for
+these responses. Web callers can inspect returned metadata explicitly; native
+routing APIs may return no link. A claim receipt is not a redeemable link token.
+An independently supplied valid CID/referrer can still authorize navigation with
+`navigationAllowed: true`; it retains the original claim receipt and attribution
+classification rather than generating another claim.
+
+## Tracking credentials and acceptance (unreleased Edge)
+
+Configure an app ID and a key with `can_ingest` for client telemetry. In Portal,
+select **Client analytics and link reading**; it cannot manage links, settings,
+or keys, and cannot read private management/visitor diagnostics. A read-only key cannot ingest events. Both event routes require validated
+credentials even when link resolution permits optional keys.
+
+The existing `track` API uses the legacy `/api/app-events` route. Its return does
+not prove delivery, durable webhook acknowledgement, or a verified conversion.
+The SDK currently has no durable telemetry queue and does not promise event-ID
+retry semantics. New Edge stores legacy events with app scope; an omitted event
+ID receives a server ID, so calling `track` again creates another event. Optional
+`userId` is a caller-provided pseudonym, not authenticated identity.
+
+For explicit persistence receipts and safe HTTP retries, `/api/app-events/v1`
+accepts a versioned envelope with a stable `eventId`, `occurredAt`, SDK/version,
+platform, consent and structured properties. Reuse the same event ID and content
+on retry; a successful receipt is 202, changed content is 409. The route requires
+`can_ingest`, bounds the body to 32 KiB, and rate-limits by app. Claim events are
+server-owned. This SDK has not yet adopted the versioned sender/queue contract.
+
+## Request lifecycle (unreleased)
+
+`LinkMe.Config` accepts `requestTimeoutMs` with a 15000 ms default. Positive values
+up to 2147483647 are accepted; invalid overrides throw `IllegalArgumentException`.
+The deadline includes queued work, optional device collection, connection and
+response-body I/O. Tasks and workers are bounded. `cancelPendingRequests()`
+cancels active HTTP/referrer discovery work and invalidates queued results.
+`dispose()` also clears configuration, listeners, pending URLs, identity and
+payload context. Reconfiguration clears app context/identity/payload state while
+keeping listeners; identity changes invalidate pending work. Later requests can
+run after cancellation or reconfiguration.
+
+All payload callbacks, including `getInitialLink`, run on Android main. Listeners
+receive results in subscription order without automatic replay; use
+`getInitialLink` to read the current payload. Removal is idempotent and belongs to
+one subscription, even if the same handler was registered twice. A listener's
+reentrant lifecycle change stops later delivery and the old completion payload;
+a listener exception does not prevent other listeners or claim completion.
+Preconfigure URLs are queued once, and stale queued results cannot cross apps.
+
+Install Referrer service discovery uses at most six seconds (or the shorter
+configured deadline). Binder reading runs on a background worker. Once a valid
+referrer is obtained, the referrer HTTP claim gets its own request deadline;
+fingerprint fallback cannot race that claim. Unavailable/timed-out discovery or
+an unsuccessful referrer claim may fall back once. Cancellation requests closure of the
+service and does not start fallback. This is not evidence of a real Play install.
+
+HTTP credentials, identity, attribution and optional device policy are captured
+for the initiating app. A cancelled optional read cannot later start HTTP under a
+new app's configuration. No automatic retry is added, and cancelling cannot
+retract a server mutation already accepted. Tracking still uses its existing
+best-effort sender; the versioned queue/receipt contract remains separate work.
+
+
+The local core also exposes lifecycle protocol V1 for wrappers that discover
+support at runtime. Commands and payload frames carry an opaque owner and client
+generation; control retries do not cancel newer work, and foreign/stale owners
+cannot read payloads. Direct typed-core lifecycle/identity/changed advertising
+consent calls withdraw wrapper ownership. Changed advertising consent also
+invalidates pending work. This does not implement all collection controls.
+Flutter public Dart integration with the native channel adapters and coordinated
+published core dependencies remain pending; the current Flutter pins do not provide this protocol.

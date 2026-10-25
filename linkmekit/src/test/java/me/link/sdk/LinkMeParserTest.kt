@@ -6,6 +6,14 @@ import org.junit.Test
 
 class LinkMeParserTest {
     @Test
+    fun metadataOnlyAttributionCannotTriggerRoutingOrBrowserLaunch() {
+        val payload = LinkMe.shared.parsePayload("""{"navigationAllowed":false,"claimId":"inferred","forceRedirectWeb":true,"webFallbackUrl":"https://must-not-open.example"}""")!!
+        assertEquals(false, payload.navigationAllowed)
+        assertEquals(true, LinkMe.shared.handleForcedWebRedirect(payload))
+        assertNull(LinkMe.shared.parsePayload("""{"navigationAllowed":"false","path":"/must-not-route"}"""))
+    }
+
+    @Test
     fun parsesEscapedStringsAndNestedMaps() {
         val payload = LinkMe.shared.parsePayload(
             """{"cid":"abc12345","linkId":"link_1","path":"/hello/\"world","params":{"message":"a,b"},"duplicate":true,"forceRedirectWeb":true,"webFallbackUrl":"https://example.test/?q=a%20b"}"""

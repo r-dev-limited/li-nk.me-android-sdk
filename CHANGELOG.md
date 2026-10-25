@@ -4,6 +4,18 @@ All notable changes to the LinkMe Android SDK.
 
 ## Unreleased
 
+- Expose runtime-discoverable wrapper lifecycle protocol V1 with owner/generation guards, idempotent control replay and scoped read/listener frames. Native Flutter channel integration and coordinated release pins remain pending.
+- Invalidate pending work when advertising consent changes; direct native lifecycle/identity changes withdraw wrapper ownership.
+
+- Add a configurable 15-second total request deadline, bounded workers/queue, cancellation and disposal. Capture app credentials/identity/device policy before work and invalidate old results across app/identity changes.
+- Deliver all payload callbacks on main, including initial-link reads. Preserve listener order, isolate listener exceptions and make removal independent/idempotent for duplicate subscriptions.
+- Bound Install Referrer discovery and background Binder reads separately from HTTP. A valid referrer claim finishes before fingerprint fallback can start; cancellation closes discovery without fallback.
+- Add JVM cancellation/referrer/concurrency faults and API 35 runtime tests using the public Context/Intent adapter and owned loopback HTTP.
+
+- Preserve optional `navigationAllowed` and suppress routing callbacks/browser launches when false. Accept campaign-only inferred receipts without exposing a CID or private route.
+
+- Preserve additive claim ID, method, confidence, attribution status, payload contract version, and claim policy version in routing payloads.
+
 - Upgrade Kotlin and the Compose compiler to 2.3.21 and migrate JVM targets to the compilerOptions DSL.
 - Upgrade AndroidX annotations to 1.11.0, activity-compose to 1.13.0, Compose BOM to 2026.06.01, AndroidX JUnit to 1.3.0, and Espresso to 3.7.0.
 - Keep AGP 8.13.2, compile SDK 36, and core-ktx 1.18.0; newer Compose and Core artifacts require AGP 9.1 and compile SDK 37.
