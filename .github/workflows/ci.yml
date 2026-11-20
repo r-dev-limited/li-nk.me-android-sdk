@@ -39,12 +39,3 @@ jobs:
           # API 35 images can take ~15 minutes to boot on hosted runners.
           emulator-boot-timeout: 1800
           script: LINKME_BASE_URL=http://127.0.0.1:9 LINKME_APP_LINKS_HOST=localhost ./gradlew :example-app:connectedDebugAndroidTest --stacktrace
-      - name: Upload instrumentation reports
-        if: always()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: android-instrumentation-reports
-          path: |
-            **/build/outputs/androidTest-results/**
-            **/build/reports/androidTests/**
-          if-no-files-found: ignore
