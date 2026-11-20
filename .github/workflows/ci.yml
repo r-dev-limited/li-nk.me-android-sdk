@@ -19,7 +19,7 @@ jobs:
 
   instrumentation:
     name: Android instrumentation (API 35)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
@@ -28,6 +28,13 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v6.3.0
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sudo udevadm settle
+          test -r /dev/kvm && test -w /dev/kvm
       - name: Run example app instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2.38.0
         with:
@@ -36,15 +43,5 @@ jobs:
           arch: x86_64
           profile: pixel_2
           disable-animations: true
-          # API 35 images can take ~15 minutes to boot on hosted runners.
-          emulator-boot-timeout: 1800
+          emulator-boot-timeout: 600
           script: LINKME_BASE_URL=http://127.0.0.1:9 LINKME_APP_LINKS_HOST=localhost ./gradlew :example-app:connectedDebugAndroidTest --stacktrace
-      - name: Upload instrumentation reports
-        if: always()
-        uses: actions/upload-artifact@v7.0.1
-        with:
-          name: android-instrumentation-reports
-          path: |
-            **/build/outputs/androidTest-results/**
-            **/build/reports/androidTests/**
-          if-no-files-found: ignore
